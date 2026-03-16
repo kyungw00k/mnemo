@@ -1,0 +1,92 @@
+# mnemo Memory Instructions
+
+<!--
+Copy this file to your AI tool's instruction file:
+  Claude Code:  CLAUDE.md  (or .claude/CLAUDE.md)
+  Codex CLI:    AGENTS.md
+  opencode:     AGENTS.md
+  Cursor:       .cursorrules
+  Copilot:      .github/copilot-instructions.md
+
+Edit the sections below to match your project and preferences.
+-->
+
+## Memory: Session Start
+
+At the start of EVERY new session, before doing anything else:
+
+1. Call `memory_search` with query `"project setup decisions conventions preferences"`
+2. Call `memory_list` with category `"decision"` to review architectural choices
+3. Call `note_list` to see recent session notes
+4. Briefly summarize what you recalled (2-3 sentences max)
+
+> If mnemo is unavailable, proceed normally and note that memory is offline.
+
+## Memory: What to Save
+
+### Use `memory_save` for facts you want to recall later
+
+| Category | When to use | Example key / value |
+|----------|-------------|---------------------|
+| `decision` | Architectural or design choices | `auth_strategy` / `"JWT with refresh tokens, no sessions"` |
+| `convention` | Coding style or project rules | `error_handling` / `"always wrap with fmt.Errorf, never panic in handlers"` |
+| `config` | Environment, tools, endpoints | `db_name` / `"mnemo_prod on localhost:5432"` |
+| `bug` | Non-obvious fixes to remember | `sqlite_wal_mode` / `"must enable WAL before first query or FTS5 breaks"` |
+| `preference` | How the user likes you to work | `response_style` / `"concise, no summaries at end, code-first"` |
+
+Always set `project` to the current repository name.
+
+### Use `note_save` for longer-form content
+
+- Completed feature summaries
+- Post-mortems and retrospectives
+- Complex system design documentation
+- Research findings
+
+```
+note_save(
+  project = "<repo-name>",
+  title   = "Session 2025-01-15: Auth refactor",
+  content = "<what was built, decisions made, open questions>",
+  tags    = ["session", "auth", "refactor"]
+)
+```
+
+## Memory: What NOT to Save
+
+- Temporary debugging output
+- Code snippets that already exist in the repo
+- Anything that can be derived from `git log` or reading files
+- Secrets, passwords, API keys (use a secrets manager)
+
+## Memory: Session End
+
+Before closing a session where significant work happened:
+
+1. Save key decisions made during the session:
+   ```
+   memory_save(category="decision", key="...", value="...")
+   ```
+
+2. Save a session note:
+   ```
+   note_save(
+     title   = "Session YYYY-MM-DD: <topic>",
+     content = "## What was done\n...\n## Decisions\n...\n## Next steps\n...",
+     tags    = ["session"]
+   )
+   ```
+
+3. (Optional, if `ENABLE_AUTO_EXTRACT=true`) Call `memory_extract` with a
+   plain-text summary of the session to let the AI extract additional facts.
+
+## Memory: Search Tips
+
+- Use `memory_search` with conceptual queries, not exact keywords:
+  - ✅ `"how do we handle authentication"`
+  - ✅ `"database connection issues"`
+  - ❌ `"auth"` (too short, better to use `memory_list category=auth`)
+
+- Use `memory_categories` first if you don't know where to look
+
+- Use `note_search` for longer documents and design docs
