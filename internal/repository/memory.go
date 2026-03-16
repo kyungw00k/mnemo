@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	sqlite_vec "github.com/asg017/sqlite-vec-go-bindings/cgo"
 	"github.com/kyungw00k/mnemo/internal/db"
 )
 
@@ -62,6 +63,15 @@ func (r *MemoryRepository) Upsert(ctx context.Context, host, category, key, valu
 			return nil, fmt.Errorf("upsert memory: %w", err)
 		}
 		id, _ := result.LastInsertId()
+		if embedding != nil {
+			blob, serr := sqlite_vec.SerializeFloat32(embedding)
+			if serr == nil {
+				_, _ = r.db.Exec(ctx,
+					`INSERT OR REPLACE INTO vec_memories(memory_id, embedding) VALUES (?, ?)`,
+					id, blob,
+				)
+			}
+		}
 		return &Memory{
 			ID:        id,
 			Host:      host,
@@ -69,6 +79,7 @@ func (r *MemoryRepository) Upsert(ctx context.Context, host, category, key, valu
 			Key:       key,
 			Value:     value,
 			Metadata:  metadata,
+			Embedding: embedding,
 			CreatedAt: now,
 			UpdatedAt: now,
 			ExpiresAt: expiresAt,
@@ -124,8 +135,12 @@ func (r *MemoryRepository) Upsert(ctx context.Context, host, category, key, valu
 	}, nil
 }
 
-// VectorSearch performs a cosine similarity search using pgvector (PostgreSQL only).
+// VectorSearch performs a cosine similarity search using sqlite-vec (SQLite) or pgvector (PostgreSQL).
 func (r *MemoryRepository) VectorSearch(ctx context.Context, host, category string, vector []float32, limit int) ([]MemorySearchResult, error) {
+	if r.db.IsSQLite() {
+		return r.sqliteVectorSearch(ctx, host, category, vector, limit)
+	}
+
 	query := `SELECT id, category, memory_key, memory_value,
 	           1-(embedding<=>$1::vector) as similarity, created_at
 	           FROM memories
@@ -139,6 +154,35 @@ func (r *MemoryRepository) VectorSearch(ctx context.Context, host, category stri
 	rows, err := r.db.Query(ctx, query, vectorString(vector), host, category, limit)
 	if err != nil {
 		return nil, fmt.Errorf("vector search memories: %w", err)
+	}
+	defer rows.Close()
+	return scanMemoryResults(rows)
+}
+
+// sqliteVectorSearch performs KNN search via sqlite-vec vec0 virtual table.
+func (r *MemoryRepository) sqliteVectorSearch(ctx context.Context, host, category string, vector []float32, limit int) ([]MemorySearchResult, error) {
+	blob, err := sqlite_vec.SerializeFloat32(vector)
+	if err != nil {
+		return nil, fmt.Errorf("serialize vector: %w", err)
+	}
+
+	sqlQuery := `SELECT m.id, m.category, m.memory_key, m.memory_value,
+	              (1.0 - v.distance) as similarity, m.created_at
+	              FROM vec_memories v
+	              JOIN memories m ON m.id = v.memory_id
+	              WHERE v.embedding MATCH ? AND k = ?
+	              AND m.del_yn='N' AND m.host=?
+	              AND (m.expires_at IS NULL OR m.expires_at > datetime('now'))`
+	args := []any{blob, limit, host}
+	if category != "" {
+		sqlQuery += " AND m.category=?"
+		args = append(args, category)
+	}
+	sqlQuery += " ORDER BY v.distance"
+
+	rows, err := r.db.Query(ctx, sqlQuery, args...)
+	if err != nil {
+		return nil, fmt.Errorf("sqlite vec search memories: %w", err)
 	}
 	defer rows.Close()
 	return scanMemoryResults(rows)

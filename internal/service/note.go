@@ -14,16 +14,14 @@ import (
 type NoteService struct {
 	repo      *repository.NoteRepository
 	embedding *EmbeddingService
-	isSQLite  bool
 	ttlDays   int
 }
 
 // NewNoteService creates a new NoteService.
-func NewNoteService(repo *repository.NoteRepository, embedding *EmbeddingService, isSQLite bool, ttlDays int) *NoteService {
+func NewNoteService(repo *repository.NoteRepository, embedding *EmbeddingService, ttlDays int) *NoteService {
 	return &NoteService{
 		repo:      repo,
 		embedding: embedding,
-		isSQLite:  isSQLite,
 		ttlDays:   ttlDays,
 	}
 }
@@ -38,8 +36,7 @@ func (s *NoteService) Save(ctx context.Context, host, project, title, content st
 
 	var embedding []float32
 
-	// Only generate embeddings in PostgreSQL mode.
-	if !s.isSQLite && s.embedding != nil {
+	if s.embedding != nil {
 		embText := title + " " + content
 		emb, err := s.embedding.Embed(ctx, embText)
 		if err != nil {
@@ -63,13 +60,9 @@ func (s *NoteService) Save(ctx context.Context, host, project, title, content st
 	return note, nil
 }
 
-// Search searches notes using vector similarity (PostgreSQL) or FTS5 (SQLite).
+// Search searches notes using vector similarity or FTS5 fallback.
 func (s *NoteService) Search(ctx context.Context, host, project, query string, limit int) ([]repository.NoteSearchResult, error) {
-	if s.isSQLite {
-		return s.repo.TextSearch(ctx, host, project, query, limit)
-	}
-
-	// Try vector search first.
+	// Try vector search first when embedding service is available.
 	if s.embedding != nil {
 		vec, err := s.embedding.Embed(ctx, query)
 		if err == nil && vec != nil {

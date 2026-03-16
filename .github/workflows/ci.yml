@@ -26,17 +26,20 @@ jobs:
         with:
           go-version: ${{ matrix.go-version }}
 
+      - name: Install C compiler (required for CGO/sqlite-vec)
+        run: sudo apt-get install -y gcc
+
       - name: Install gotestsum
         run: go install gotest.tools/gotestsum@latest
 
       - name: Build
-        run: go build ./...
+        run: CGO_ENABLED=1 go build ./...
 
       - name: Vet
-        run: go vet ./...
+        run: CGO_ENABLED=1 go vet ./...
 
       - name: Unit Tests
-        run: gotestsum --junitfile junit/unit.xml -- ./... -v
+        run: CGO_ENABLED=1 gotestsum --junitfile junit/unit.xml -- ./... -v
 
       - name: Upload Test Results
         if: always()

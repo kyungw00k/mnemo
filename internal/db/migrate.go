@@ -66,11 +66,9 @@ func Migrate(ctx context.Context, conn *DBConn, migrationsFS fs.FS, dimensions i
 			return fmt.Errorf("read migration file %q: %w", version, err)
 		}
 
-		// Replace $DIMENSIONS placeholder for PostgreSQL vector column definitions.
+		// Replace $DIMENSIONS placeholder for vector column definitions (PostgreSQL and SQLite).
 		sqlContent := string(content)
-		if conn.IsPostgres() {
-			sqlContent = strings.ReplaceAll(sqlContent, "$DIMENSIONS", fmt.Sprintf("%d", dimensions))
-		}
+		sqlContent = strings.ReplaceAll(sqlContent, "$DIMENSIONS", fmt.Sprintf("%d", dimensions))
 
 		// Execute the migration SQL.
 		if _, err := conn.Exec(ctx, sqlContent); err != nil {

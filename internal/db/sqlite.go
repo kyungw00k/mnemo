@@ -7,10 +7,15 @@ import (
 	"path/filepath"
 	"strings"
 
-	_ "modernc.org/sqlite" // register sqlite driver
+	sqlite_vec "github.com/asg017/sqlite-vec-go-bindings/cgo"
+	_ "github.com/mattn/go-sqlite3" // register sqlite3 driver (CGO)
 )
 
-// NewSQLite creates a new DBConn backed by SQLite using modernc.org/sqlite (CGO-free).
+func init() {
+	sqlite_vec.Auto()
+}
+
+// NewSQLite creates a new DBConn backed by SQLite using mattn/go-sqlite3 + sqlite-vec.
 // It expands ~ in the path, creates the directory if needed, and enables WAL mode.
 func NewSQLite(path string) (*DBConn, error) {
 	// Expand ~ to home directory.
@@ -29,7 +34,7 @@ func NewSQLite(path string) (*DBConn, error) {
 	}
 
 	// Open the SQLite database.
-	db, err := sql.Open("sqlite", path)
+	db, err := sql.Open("sqlite3", path)
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite db: %w", err)
 	}

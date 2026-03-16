@@ -13,26 +13,23 @@ import (
 type MemoryService struct {
 	repo      *repository.MemoryRepository
 	embedding *EmbeddingService
-	isSQLite  bool
 	ttlDays   int
 }
 
 // NewMemoryService creates a new MemoryService.
-func NewMemoryService(repo *repository.MemoryRepository, embedding *EmbeddingService, isSQLite bool, ttlDays int) *MemoryService {
+func NewMemoryService(repo *repository.MemoryRepository, embedding *EmbeddingService, ttlDays int) *MemoryService {
 	return &MemoryService{
 		repo:      repo,
 		embedding: embedding,
-		isSQLite:  isSQLite,
 		ttlDays:   ttlDays,
 	}
 }
 
-// Save upserts a memory entry, optionally generating an embedding for PostgreSQL.
+// Save upserts a memory entry, optionally generating an embedding.
 func (s *MemoryService) Save(ctx context.Context, host, category, key, value, metadata string) (*repository.Memory, error) {
 	var embedding []float32
 
-	// Only generate embeddings in PostgreSQL mode.
-	if !s.isSQLite && s.embedding != nil {
+	if s.embedding != nil {
 		emb, err := s.embedding.Embed(ctx, value)
 		if err != nil {
 			log.Printf("embedding generation failed (continuing without): %v", err)
@@ -55,14 +52,9 @@ func (s *MemoryService) Save(ctx context.Context, host, category, key, value, me
 	return mem, nil
 }
 
-// Search searches memories using vector similarity (PostgreSQL) or FTS5 (SQLite).
-// Falls back to text search if embedding fails.
+// Search searches memories using vector similarity or FTS5 fallback.
 func (s *MemoryService) Search(ctx context.Context, host, category, query string, limit int) ([]repository.MemorySearchResult, error) {
-	if s.isSQLite {
-		return s.repo.TextSearch(ctx, host, category, query, limit)
-	}
-
-	// Try vector search first.
+	// Try vector search first when embedding service is available.
 	if s.embedding != nil {
 		vec, err := s.embedding.Embed(ctx, query)
 		if err == nil && vec != nil {
@@ -74,7 +66,7 @@ func (s *MemoryService) Search(ctx context.Context, host, category, query string
 		}
 	}
 
-	// Fall back to text search.
+	// Fall back to text search (FTS5 for SQLite, LIKE for PostgreSQL).
 	return s.repo.TextSearch(ctx, host, category, query, limit)
 }
 

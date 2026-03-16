@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	sqlite_vec "github.com/asg017/sqlite-vec-go-bindings/cgo"
 	"github.com/kyungw00k/mnemo/internal/db"
 )
 
@@ -58,6 +59,15 @@ func (r *NoteRepository) Insert(ctx context.Context, host, project, title, conte
 			return nil, fmt.Errorf("insert note: %w", err)
 		}
 		id, _ := result.LastInsertId()
+		if embedding != nil {
+			blob, serr := sqlite_vec.SerializeFloat32(embedding)
+			if serr == nil {
+				_, _ = r.db.Exec(ctx,
+					`INSERT OR REPLACE INTO vec_notes(note_id, embedding) VALUES (?, ?)`,
+					id, blob,
+				)
+			}
+		}
 		return &Note{
 			ID:        id,
 			Host:      host,
@@ -65,6 +75,7 @@ func (r *NoteRepository) Insert(ctx context.Context, host, project, title, conte
 			Title:     title,
 			Content:   content,
 			Tags:      tags,
+			Embedding: embedding,
 			CreatedAt: now,
 			UpdatedAt: now,
 			ExpiresAt: expiresAt,
@@ -109,8 +120,12 @@ func (r *NoteRepository) Insert(ctx context.Context, host, project, title, conte
 	}, nil
 }
 
-// VectorSearch performs a cosine similarity search on notes (PostgreSQL only).
+// VectorSearch performs a cosine similarity search on notes using sqlite-vec (SQLite) or pgvector (PostgreSQL).
 func (r *NoteRepository) VectorSearch(ctx context.Context, host, project string, vector []float32, limit int) ([]NoteSearchResult, error) {
+	if r.db.IsSQLite() {
+		return r.sqliteVectorSearch(ctx, host, project, vector, limit)
+	}
+
 	query := `SELECT id, COALESCE(project,''), title, content, COALESCE(tags,''),
 	           1-(embedding<=>$1::vector) as similarity, created_at
 	           FROM notes
@@ -124,6 +139,35 @@ func (r *NoteRepository) VectorSearch(ctx context.Context, host, project string,
 	rows, err := r.db.Query(ctx, query, vectorString(vector), host, project, limit)
 	if err != nil {
 		return nil, fmt.Errorf("vector search notes: %w", err)
+	}
+	defer rows.Close()
+	return scanNoteResults(rows)
+}
+
+// sqliteVectorSearch performs KNN search on notes via sqlite-vec vec0 virtual table.
+func (r *NoteRepository) sqliteVectorSearch(ctx context.Context, host, project string, vector []float32, limit int) ([]NoteSearchResult, error) {
+	blob, err := sqlite_vec.SerializeFloat32(vector)
+	if err != nil {
+		return nil, fmt.Errorf("serialize vector: %w", err)
+	}
+
+	sqlQuery := `SELECT n.id, COALESCE(n.project,''), n.title, n.content, COALESCE(n.tags,''),
+	              (1.0 - v.distance) as similarity, n.created_at
+	              FROM vec_notes v
+	              JOIN notes n ON n.id = v.note_id
+	              WHERE v.embedding MATCH ? AND k = ?
+	              AND n.del_yn='N' AND n.host=?
+	              AND (n.expires_at IS NULL OR n.expires_at > datetime('now'))`
+	args := []any{blob, limit, host}
+	if project != "" {
+		sqlQuery += " AND n.project=?"
+		args = append(args, project)
+	}
+	sqlQuery += " ORDER BY v.distance"
+
+	rows, err := r.db.Query(ctx, sqlQuery, args...)
+	if err != nil {
+		return nil, fmt.Errorf("sqlite vec search notes: %w", err)
 	}
 	defer rows.Close()
 	return scanNoteResults(rows)

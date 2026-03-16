@@ -7,7 +7,10 @@ IMAGE=ghcr.io/kyungw00k/mnemo
 .PHONY: build test lint clean run-stdio run-sse install docker-build docker-run docker-push
 
 build:
-	go build -o $(BUILD_DIR)/$(BINARY_NAME) $(CMD_PATH)
+	CGO_ENABLED=1 go build -o $(BUILD_DIR)/$(BINARY_NAME) $(CMD_PATH)
+
+build-linux-static:
+	CGO_ENABLED=1 GOOS=linux go build -ldflags="-extldflags=-static" -o $(BUILD_DIR)/$(BINARY_NAME)-linux-static $(CMD_PATH)
 
 test:
 	go test ./...

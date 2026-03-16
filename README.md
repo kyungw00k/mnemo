@@ -20,12 +20,12 @@ Named after **Mnemosyne** — the Greek goddess of memory.
 
 ### Key Features
 
-- **Dual database support**: SQLite (zero setup, FTS5 full-text search) or PostgreSQL (pgvector HNSW vector search)
+- **Dual database support**: SQLite (zero setup, **sqlite-vec cosine similarity** + FTS5 fallback) or PostgreSQL (pgvector HNSW vector search)
 - **OpenAI Compatible embeddings**: works with Ollama, LM Studio, OpenAI, or any `/v1/embeddings` endpoint
 - **Dual transport**: stdio (per-session) and SSE (persistent HTTP server) — run both simultaneously
 - **11 MCP tools**: memory and note management, raw DB access with security guardrails
 - **Host isolation**: memories are scoped per machine via `HOST_ID`
-- **Single static binary**: no JVM, no runtime dependencies, CGO-free
+- **Single static binary**: no JVM, no runtime dependencies (CGO at build time only — final output is a single binary)
 
 ---
 
@@ -124,11 +124,22 @@ docker run -d --name mnemo \
 
 ### Build from source
 
+mnemo uses [sqlite-vec](https://github.com/asg017/sqlite-vec) for vector search in SQLite mode, which requires a C compiler at build time. The final output is still a single static binary.
+
+| Platform | Requirement |
+|----------|-------------|
+| macOS | Xcode Command Line Tools (`xcode-select --install`) |
+| Linux | `gcc` (e.g. `apt-get install gcc`) |
+| Docker | Handled automatically in the Dockerfile |
+
 ```bash
 git clone https://github.com/kyungw00k/mnemo.git
 cd mnemo
 make build
 # binary at ./dist/mnemo
+
+# Linux static binary (for deployment without libc)
+make build-linux-static
 ```
 
 ---
@@ -148,7 +159,7 @@ All configuration is via environment variables. See `.env.example` for a templat
 | `EMBEDDING_MODEL` | `nomic-embed-text` | Embedding model name |
 | `EMBEDDING_DIMENSIONS` | `768` | Vector dimensions. Must match the model's output size. |
 
-**Note**: In SQLite mode, embedding calls are skipped entirely. FTS5 full-text search is used instead. Embedding variables only take effect with PostgreSQL.
+**Note**: In SQLite mode, embeddings are used for vector search via sqlite-vec when an embedding endpoint is configured. If no embedding service is available, FTS5 full-text search is used as a fallback. Embedding variables work with both SQLite and PostgreSQL.
 
 ---
 

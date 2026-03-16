@@ -1,17 +1,18 @@
 FROM golang:1.22-alpine AS builder
 
+RUN apk add --no-cache gcc musl-dev
+
 WORKDIR /app
 
 COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
-RUN go build -ldflags="-s -w" -o /mnemo ./cmd/mnemo
+RUN CGO_ENABLED=1 go build -ldflags="-s -w -extldflags=-static" -o /mnemo ./cmd/mnemo
 
-FROM alpine:latest
+FROM scratch
 
-RUN apk --no-cache add ca-certificates
-
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 COPY --from=builder /mnemo /mnemo
 
 EXPOSE 8765
