@@ -138,6 +138,36 @@
 
 ---
 
+## Phase 15: AI Tool Integration Guide [cc:TODO]
+
+> AI coding tools use different instruction files, but the content is identical.
+> mnemo should provide a tool-agnostic example that works for all.
+
+| Tool | Instruction File |
+|------|-----------------|
+| Claude Code | `CLAUDE.md` |
+| OpenAI Codex CLI | `AGENTS.md` |
+| opencode | `AGENTS.md` |
+| Cursor | `.cursorrules` |
+| GitHub Copilot | `.github/copilot-instructions.md` |
+
+- [ ] `cc:TODO` **Task 41** — Create `AGENT_INSTRUCTIONS.md.example`
+  - Tool-agnostic template users copy to `CLAUDE.md` / `AGENTS.md` / `.cursorrules` etc.
+  - Sections:
+    - **Session Start Protocol**: which tools to call first (`memory_search`, `memory_list`, `note_list`)
+    - **What to Remember**: categories (decision, bug, convention, config, preference) + when to save
+    - **Note-Taking Rules**: when to use notes vs memories, `project` field usage
+    - **Session End Protocol**: how to summarize and save before ending
+  - Include concrete examples for each MCP tool call
+
+- [ ] `cc:TODO` **Task 42** — README: "AI Tool Integration" section
+  - Explain `CLAUDE.md` vs `AGENTS.md` vs `.cursorrules` — same content, different filenames
+  - Show the copy command: `cp AGENT_INSTRUCTIONS.md.example CLAUDE.md`
+  - Per-tool subsections: Claude Code, Codex CLI, opencode, Cursor, Copilot
+  - Include the full recommended instruction template inline
+
+---
+
 ## Dependency Graph
 
 ```
@@ -148,4 +178,7 @@ Task 35 (deps) → Task 36 (schema) → Task 37 (repo) → Task 38 (service)
                                                               ↓
                                                         Task 39 (build)
                                                         Task 40 (docs)
+
+Phase 15: independent — can run any time
+Task 41 (AGENT_INSTRUCTIONS.md.example) → Task 42 (README section)
 ```

@@ -287,6 +287,48 @@ Set `HOST_ID` explicitly in containers so that memories are consistently scoped 
 
 ---
 
+## AI Tool Integration Guide
+
+mnemo works with any MCP-compatible AI coding tool. Each tool uses a different instruction file, but the content is identical — copy the provided template and rename it:
+
+| Tool | Instruction File | Copy Command |
+|------|-----------------|--------------|
+| Claude Code | `CLAUDE.md` | `cp AGENT_INSTRUCTIONS.md.example CLAUDE.md` |
+| OpenAI Codex CLI | `AGENTS.md` | `cp AGENT_INSTRUCTIONS.md.example AGENTS.md` |
+| opencode | `AGENTS.md` | `cp AGENT_INSTRUCTIONS.md.example AGENTS.md` |
+| Cursor | `.cursorrules` | `cp AGENT_INSTRUCTIONS.md.example .cursorrules` |
+| GitHub Copilot | `.github/copilot-instructions.md` | `cp AGENT_INSTRUCTIONS.md.example .github/copilot-instructions.md` |
+
+The template (`AGENT_INSTRUCTIONS.md.example`) instructs the AI to:
+- **Load memories at session start** — search and summarize before working
+- **Save decisions and conventions** — structured by category (`decision`, `bug`, `config`, `convention`, `preference`)
+- **Write session notes** — longer-form summaries with project + tags
+- **Clean up on session end** — save key outcomes before closing
+
+### Recommended Instruction Snippet
+
+Add this to your instruction file to activate memory at every session:
+
+````markdown
+## Memory Protocol
+
+At the start of every session:
+1. Call memory_search("project setup decisions conventions")
+2. Call memory_list(category="decision")
+3. Call note_list() to see recent notes
+4. Summarize recalled context before starting work
+
+Save to memory when:
+- An architectural decision is made → category: "decision"
+- A non-obvious bug is fixed → category: "bug"
+- Project conventions are established → category: "convention"
+- Always set project = "<your-repo-name>"
+````
+
+See [`AGENT_INSTRUCTIONS.md.example`](AGENT_INSTRUCTIONS.md.example) for the full template with search tips, session-end protocol, and per-category guidance.
+
+---
+
 ## Contributing
 
 Standard Go project conventions apply.
