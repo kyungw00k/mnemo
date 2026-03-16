@@ -36,9 +36,10 @@ Reasons for rewrite:
 ## Architecture Decisions
 
 ### DB Strategy
-- **SQLite** (default, Phase 14 pending): `modernc.org/sqlite` → will migrate to `mattn/go-sqlite3` + `sqlite-vec`
-  - Current: FTS5 keyword search only
-  - Phase 14: real cosine similarity via `vec0` virtual tables (CGO at build time, single binary at runtime)
+- **SQLite** (default): `mattn/go-sqlite3` + `sqlite-vec` (Phase 14 완료)
+  - Vector search: cosine similarity via `vec0` virtual tables (`vec_memories`, `vec_notes`)
+  - FTS5 fallback when embedding service unavailable
+  - CGO required at build time only — runtime is a single static binary
   - Default path: `~/.mnemo/memory.db`
 - **PostgreSQL**: pgx/v5 + pgvector-go, HNSW indexes, cosine similarity
   - Requires pgvector extension
@@ -49,17 +50,19 @@ Reasons for rewrite:
   - `EMBEDDING_API_KEY` (empty = no Authorization header, works for local Ollama/LM Studio)
   - `EMBEDDING_MODEL` (e.g., `nomic-embed-text`, `text-embedding-3-small`)
   - `EMBEDDING_DIMENSIONS` (default: 768, must match model output)
-- **SQLite mode (current)**: embedding calls skipped, FTS5 used instead
-- **SQLite mode (Phase 14)**: embedding called, stored as BLOB, cosine similarity via sqlite-vec
-- **Fallback**: if embedding fails → FTS5 / LIKE text search
+- **SQLite mode**: embedding called and stored as BLOB in `vec_memories`/`vec_notes`; cosine similarity via sqlite-vec
+- **Fallback**: if embedding unavailable or fails → FTS5 / LIKE text search
 
-### Phase 14: sqlite-vec Plan
-- Replace `modernc.org/sqlite` with `mattn/go-sqlite3` + `github.com/asg017/sqlite-vec-go-bindings/cgo`
-- CGO required at **build time only** — runtime binary is still single file
-- macOS: `xcode-select --install` sufficient (Apple Clang built-in, CGO_ENABLED=1 is default)
-- Linux: `gcc` + `-ldflags="-extldflags=-static"` for fully static binary
-- Docker: add `apk add --no-cache gcc musl-dev` to builder stage
-- CI: add `sudo apt-get install -y gcc` to workflow
+### Phase 14: sqlite-vec (완료)
+- `modernc.org/sqlite` → `mattn/go-sqlite3` + `github.com/asg017/sqlite-vec-go-bindings/cgo`
+- `init() { sqlite_vec.Auto() }` in `internal/db/sqlite.go` registers extension for all connections
+- `internal/migrations/sqlite/004_vec.sql`: `vec_memories`, `vec_notes` vec0 virtual tables
+- KNN query: `WHERE embedding MATCH ? AND k = ? ORDER BY distance`; similarity = 1 - distance
+- Upsert writes to vec table: `INSERT OR REPLACE INTO vec_memories(memory_id, embedding)`
+- `isSQLite` embedding guard removed from service layer — both DBs now attempt embedding
+- Makefile: `CGO_ENABLED=1`, `build-linux-static` target
+- Dockerfile: `FROM scratch` + static build (`-extldflags=-static`)
+- CI: `sudo apt-get install -y gcc` before build
 
 ### Transport Strategy
 - **stdio**: Claude Code integration (spawned process per session)
@@ -118,15 +121,12 @@ TTL adds `expires_at` column via migrations 003 (postgres + sqlite).
 ## Key Dependencies
 
 ```go
-// go.mod dependencies (current)
-github.com/mark3labs/mcp-go          // MCP server (stdio + SSE)
-github.com/jackc/pgx/v5              // PostgreSQL driver
-github.com/pgvector/pgvector-go      // pgvector type support
-modernc.org/sqlite                   // SQLite (pure Go, CGO-free) — Phase 14에서 교체 예정
-
-// Phase 14 추가 예정
+// go.mod dependencies
+github.com/mark3labs/mcp-go                       // MCP server (stdio + SSE)
+github.com/jackc/pgx/v5                           // PostgreSQL driver
+github.com/pgvector/pgvector-go                   // pgvector type support
 github.com/mattn/go-sqlite3                       // SQLite CGO driver
-github.com/asg017/sqlite-vec-go-bindings/cgo      // sqlite-vec extension
+github.com/asg017/sqlite-vec-go-bindings/cgo      // sqlite-vec extension (Phase 14)
 ```
 
 ## Environment Variables
@@ -195,7 +195,7 @@ mnemo/
 ├── internal/
 │   ├── config/config.go
 │   ├── db/driver.go, postgres.go, sqlite.go, migrate.go
-│   ├── migrations/embed.go            ← embed.FS wrapper
+│   ├── migrations/embed.go, sqlite/004_vec.sql  ← embed.FS + vec tables
 │   ├── repository/memory.go, note.go
 │   ├── service/memory.go, note.go, embedding.go, extract.go
 │   ├── mcp/server.go, tools_memory.go, tools_note.go, tools_db.go, tools_extra.go
