@@ -4,11 +4,11 @@
 [![Latest Release](https://img.shields.io/github/v/release/kyungw00k/mnemo)](https://github.com/kyungw00k/mnemo/releases)
 [![Go 1.22+](https://img.shields.io/badge/go-1.22+-00ADD8?logo=go)](https://go.dev/)
 [![License](https://img.shields.io/github/license/kyungw00k/mnemo)](LICENSE)
-[![SQLite](https://img.shields.io/badge/SQLite-supported-003B57?logo=sqlite)](https://sqlite.org/)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-supported-4169E1?logo=postgresql)](https://www.postgresql.org/)
+[![SQLite](https://img.shields.io/badge/SQLite-sqlite--vec-003B57?logo=sqlite)](https://sqlite.org/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-pgvector-4169E1?logo=postgresql)](https://www.postgresql.org/)
 
 > Persistent MCP memory server for Claude Code and opencode —
-> single Go binary, zero setup with SQLite, full vector search with PostgreSQL.
+> single Go binary, vector search in both SQLite and PostgreSQL.
 
 ---
 
@@ -20,12 +20,12 @@ Named after **Mnemosyne** — the Greek goddess of memory.
 
 ### Key Features
 
-- **Dual database support**: SQLite (zero setup, **sqlite-vec cosine similarity** + FTS5 fallback) or PostgreSQL (pgvector HNSW vector search)
-- **OpenAI Compatible embeddings**: works with Ollama, LM Studio, OpenAI, or any `/v1/embeddings` endpoint
+- **Dual database support**: SQLite (zero setup, [sqlite-vec](https://github.com/asg017/sqlite-vec) cosine similarity + FTS5 fallback) or PostgreSQL (pgvector HNSW vector search)
+- **OpenAI Compatible embeddings**: works with Ollama, LM Studio, OpenAI, or any `/v1/embeddings` endpoint — for **both** SQLite and PostgreSQL
 - **Dual transport**: stdio (per-session) and SSE (persistent HTTP server) — run both simultaneously
-- **11 MCP tools**: memory and note management, raw DB access with security guardrails
+- **11 MCP tools** (+ 4 optional): memory and note management, raw DB access with security guardrails
 - **Host isolation**: memories are scoped per machine via `HOST_ID`
-- **Single static binary**: no JVM, no runtime dependencies (CGO at build time only — final output is a single binary)
+- **Single static binary**: no JVM, no runtime dependencies (CGO at build time only)
 
 ---
 
@@ -34,8 +34,8 @@ Named after **Mnemosyne** — the Greek goddess of memory.
 ```
 Claude Code ──┐
               ├── MCP (stdio) ──┐
-opencode ─────┤                 ├── mnemo ──── SQLite  (FTS5)
-              └── MCP (SSE)  ───┘         └── PostgreSQL (pgvector)
+opencode ─────┤                 ├── mnemo ──── SQLite  (sqlite-vec cosine similarity)
+              └── MCP (SSE)  ───┘         └── PostgreSQL (pgvector HNSW)
 ```
 
 By default (`TRANSPORT=both`), mnemo runs stdio and SSE simultaneously. Claude Code and opencode both connect to the same in-process state, giving them shared memory.
@@ -101,14 +101,20 @@ Pre-built multi-platform images (`linux/amd64`, `linux/arm64`) are published to 
 | `dev` | On every push to `main` |
 
 ```bash
-# Latest release
-docker pull ghcr.io/kyungw00k/mnemo:latest
-
 # Run with SQLite (zero setup)
 docker run -d --name mnemo \
   -p 8765:8765 \
   -v ~/.mnemo:/root/.mnemo \
   -e TRANSPORT=sse \
+  ghcr.io/kyungw00k/mnemo:latest
+
+# Run with SQLite + embeddings (vector search)
+docker run -d --name mnemo \
+  -p 8765:8765 \
+  -v ~/.mnemo:/root/.mnemo \
+  -e EMBEDDING_BASE_URL=http://host.docker.internal:11434/v1 \
+  -e TRANSPORT=sse \
+  -e HOST_ID=mymachine \
   ghcr.io/kyungw00k/mnemo:latest
 
 # Run with PostgreSQL + embeddings
@@ -159,7 +165,18 @@ All configuration is via environment variables. See `.env.example` for a templat
 | `EMBEDDING_MODEL` | `nomic-embed-text` | Embedding model name |
 | `EMBEDDING_DIMENSIONS` | `768` | Vector dimensions. Must match the model's output size. |
 
-**Note**: In SQLite mode, embeddings are used for vector search via sqlite-vec when an embedding endpoint is configured. If no embedding service is available, FTS5 full-text search is used as a fallback. Embedding variables work with both SQLite and PostgreSQL.
+**Embedding variables work with both SQLite and PostgreSQL.** In SQLite mode, embeddings are stored via sqlite-vec for cosine similarity search. If no embedding endpoint is configured, FTS5 full-text search is used as a fallback.
+
+### Optional features
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `ENABLE_AUTO_EXTRACT` | `false` | Enable `memory_extract` tool — LLM auto-extracts key memories from conversation text |
+| `ENABLE_GIT_CONTEXT` | `false` | Auto-detect git repo and tag memories with the project name |
+| `MEMORY_TTL_DAYS` | `0` (off) | Auto-expire memories after N days; enables `memory_cleanup` tool |
+| `EXTRACT_LLM_BASE_URL` | _(same as EMBEDDING_BASE_URL)_ | LLM endpoint for extraction (OpenAI Compatible) |
+| `EXTRACT_LLM_API_KEY` | _(empty)_ | API key for extraction LLM |
+| `EXTRACT_LLM_MODEL` | `llama3` | Model name for extraction |
 
 ---
 
@@ -214,6 +231,29 @@ mnemo is spawned per session. Each session shares the same database.
 
 ---
 
+## Using SQLite with Vector Search
+
+SQLite mode supports real cosine similarity search via [sqlite-vec](https://github.com/asg017/sqlite-vec). No separate database setup is required — just configure an embedding endpoint.
+
+```bash
+# With Ollama (local)
+export EMBEDDING_BASE_URL="http://localhost:11434/v1"
+export EMBEDDING_MODEL="nomic-embed-text"
+export EMBEDDING_DIMENSIONS=768
+mnemo
+
+# With OpenAI
+export EMBEDDING_BASE_URL="https://api.openai.com/v1"
+export EMBEDDING_API_KEY="sk-..."
+export EMBEDDING_MODEL="text-embedding-3-small"
+export EMBEDDING_DIMENSIONS=1536
+mnemo
+```
+
+If no embedding endpoint is available, mnemo falls back to FTS5 full-text search automatically.
+
+---
+
 ## Using PostgreSQL with Vector Search
 
 PostgreSQL enables semantic (vector) search using pgvector HNSW indexes. Text search remains available as a fallback if embedding fails.
@@ -263,14 +303,14 @@ Migrations run automatically on startup. HNSW indexes are created for fast appro
 
 ## MCP Tools Reference
 
-mnemo exposes 11 tools over MCP.
+mnemo exposes 11 tools over MCP, with up to 4 additional optional tools enabled via environment variables.
 
 ### Memory tools
 
 | Tool | Description | Key Parameters |
 |------|-------------|----------------|
 | `memory_save` | Save or update a key-value memory entry | `category`, `key`, `value`, `metadata` (optional) |
-| `memory_search` | Search memories by semantic similarity (vector) or full-text (FTS5) | `query`, `category` (optional), `limit` (optional) |
+| `memory_search` | Search memories by cosine similarity (vector) or full-text (FTS5) | `query`, `category` (optional), `limit` (optional) |
 | `memory_list` | List memory entries for a category | `category`, `limit` (optional) |
 | `memory_delete` | Soft-delete a memory entry | `id` or (`category` + `key`) |
 | `memory_categories` | List all distinct memory categories for the current host | _(none)_ |
@@ -280,7 +320,7 @@ mnemo exposes 11 tools over MCP.
 | Tool | Description | Key Parameters |
 |------|-------------|----------------|
 | `note_save` | Save a structured note with tags | `title`, `content`, `project` (optional), `tags` (string array, optional) |
-| `note_search` | Search notes by semantic similarity or full-text | `query`, `project` (optional), `limit` (optional) |
+| `note_search` | Search notes by cosine similarity or full-text | `query`, `project` (optional), `limit` (optional) |
 | `note_list` | List notes for a project | `project`, `limit` (optional) |
 | `note_delete` | Soft-delete a note by ID | `id` |
 
@@ -293,34 +333,16 @@ mnemo exposes 11 tools over MCP.
 
 `db_execute` uses an allowlist: only `INSERT`, `UPDATE`, and `DELETE` statements are accepted. `CREATE`, `DROP`, `TRUNCATE`, `ALTER`, `GRANT`, and `SELECT` are rejected. Semicolon injection is not possible (single statement enforced).
 
----
+### Optional tools
 
-## Docker
+Enabled via environment variables:
 
-```bash
-docker run -d \
-  --name mnemo \
-  -p 8765:8765 \
-  -e DB_URL=sqlite:///data/memory.db \
-  -v ~/.mnemo:/data \
-  ghcr.io/kyungw00k/mnemo:latest
-```
-
-With PostgreSQL and Ollama embeddings:
-
-```bash
-docker run -d \
-  --name mnemo \
-  -p 8765:8765 \
-  -e DB_URL="postgres://user:password@host.docker.internal/mnemo" \
-  -e EMBEDDING_BASE_URL="http://host.docker.internal:11434/v1" \
-  -e EMBEDDING_MODEL="nomic-embed-text" \
-  -e EMBEDDING_DIMENSIONS=768 \
-  -e HOST_ID="my-workstation" \
-  ghcr.io/kyungw00k/mnemo:latest
-```
-
-Set `HOST_ID` explicitly in containers so that memories are consistently scoped even if the container hostname changes.
+| Tool | Env Var | Description |
+|------|---------|-------------|
+| `memory_extract` | `ENABLE_AUTO_EXTRACT=true` | LLM auto-extracts key memories from a conversation text block |
+| `memory_cleanup` | `MEMORY_TTL_DAYS>0` | Hard-delete all expired memories |
+| `memory_export` | _(always on)_ | Export all memories as JSON or Markdown |
+| `memory_import` | _(always on)_ | Bulk-import memories from JSON |
 
 ---
 
