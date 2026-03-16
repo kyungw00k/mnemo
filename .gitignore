@@ -1,0 +1,34 @@
+# Binaries
+mnemo
+/dist/
+
+# Build artifacts
+*.o
+*.a
+*.so
+
+# Test cache
+*.test
+*.out
+
+# Environment
+.env
+.env.local
+
+# SQLite database files
+*.db
+*.db-shm
+*.db-wal
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Go
+vendor/
