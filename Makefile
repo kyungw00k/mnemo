@@ -2,7 +2,9 @@ BINARY_NAME=mnemo
 BUILD_DIR=./dist
 CMD_PATH=./cmd/mnemo
 
-.PHONY: build test lint clean run-stdio run-sse install docker-build docker-run
+IMAGE=ghcr.io/kyungw00k/mnemo
+
+.PHONY: build test lint clean run-stdio run-sse install docker-build docker-run docker-push
 
 build:
 	go build -o $(BUILD_DIR)/$(BINARY_NAME) $(CMD_PATH)
@@ -27,6 +29,11 @@ install:
 
 docker-build:
 	docker build -t mnemo:latest .
+
+docker-push:
+	docker buildx build --platform linux/amd64,linux/arm64 \
+		-t $(IMAGE):dev \
+		--push .
 
 docker-run:
 	docker run -i --rm \

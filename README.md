@@ -92,9 +92,35 @@ go install github.com/kyungw00k/mnemo/cmd/mnemo@latest
 
 ### Docker
 
+Pre-built multi-platform images (`linux/amd64`, `linux/arm64`) are published to GHCR automatically:
+
+| Tag | When published |
+|-----|---------------|
+| `latest` | On each release tag (`v*`) |
+| `vX.Y.Z` | On each release tag |
+| `dev` | On every push to `main` |
+
 ```bash
+# Latest release
 docker pull ghcr.io/kyungw00k/mnemo:latest
+
+# Run with SQLite (zero setup)
+docker run -d --name mnemo \
+  -p 8765:8765 \
+  -v ~/.mnemo:/root/.mnemo \
+  -e TRANSPORT=sse \
+  ghcr.io/kyungw00k/mnemo:latest
+
+# Run with PostgreSQL + embeddings
+docker run -d --name mnemo \
+  -p 8765:8765 \
+  -e DB_URL=postgres://postgres:postgres@host.docker.internal:5432/mnemo \
+  -e EMBEDDING_BASE_URL=http://host.docker.internal:11434/v1 \
+  -e TRANSPORT=sse \
+  ghcr.io/kyungw00k/mnemo:latest
 ```
+
+> **Docker + SQLite**: use `-e HOST_ID=mymachine` to fix the hostname so memories persist across container restarts.
 
 ### Build from source
 
