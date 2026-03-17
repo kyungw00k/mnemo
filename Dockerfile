@@ -1,6 +1,6 @@
 FROM golang:1.25-alpine AS builder
 
-RUN apk add --no-cache gcc musl-dev
+RUN apk add --no-cache gcc musl-dev sqlite-dev
 
 WORKDIR /app
 

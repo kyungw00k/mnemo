@@ -99,7 +99,7 @@ func main() {
 	}
 
 	// 5. Auto-install Claude Code hooks when Claude Code is detected.
-	cli.MaybeAutoInstallHooks()
+	cli.MaybeAutoInstall()
 
 	// 6. Create MCP server and dashboard.
 	mcpSrv := mcpserver.NewServer(cfg, memSvc, noteSvc, conn, cfg.HostID, extractSvc)

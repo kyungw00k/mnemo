@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // settingsFile preserves all unknown fields in ~/.claude/settings.json.
@@ -35,6 +36,24 @@ var mnemoHookDefs = []struct {
 	{"PostToolUse", "Bash", "mnemo hook observe"},
 	{"Stop", "", "mnemo hook session-end"},
 }
+
+// mnemoMemoryInstructions is injected into AI tools that support agent prompt files
+// but lack a shell-command hook system (opencode, Codex).
+const mnemoMemoryInstructions = `
+## mnemo Memory
+
+You have access to a persistent memory server (mnemo) via MCP tools.
+Use these tools to maintain context across sessions:
+
+- ` + "`memory_save(category, key, value, project)`" + ` — save important facts, decisions, conventions
+- ` + "`memory_search(query)`" + ` — retrieve relevant past context by semantic search
+- ` + "`memory_list(category, limit)`" + ` — list recent memories by category
+- ` + "`note_save(project, title, content, tags)`" + ` — save longer session summaries
+- ` + "`note_search(query)`" + ` — search past session notes
+
+At session start: call memory_search("project setup decisions conventions").
+At session end: save key decisions with memory_save and a session summary with note_save.
+`
 
 // RunInstall handles 'mnemo hook install [--uninstall] [--dry-run]'.
 func RunInstall(args []string) {
@@ -111,37 +130,37 @@ func RunInstall(args []string) {
 	fmt.Println("Written to", path)
 }
 
-func claudeSettingsPath() string {
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".claude", "settings.json")
-}
-
-// MaybeAutoInstallHooks installs mnemo hooks into ~/.claude/settings.json when:
-//   - AUTO_INSTALL_HOOKS env var is not "false"
-//   - ~/.claude/ directory exists (Claude Code is present)
-//   - hooks are not already installed
+// MaybeAutoInstall detects installed AI coding tools and registers mnemo in each:
+//   - Claude Code (~/.claude/): installs shell-command hooks
+//   - opencode (~/.config/opencode/): registers MCP server + memory instructions
+//   - Codex CLI (~/.codex/): registers MCP server + memory instructions in AGENTS.md
 //
-// All output goes to stderr. Errors are logged but do not abort startup.
-func MaybeAutoInstallHooks() {
+// Skipped entirely when AUTO_INSTALL_HOOKS=false. Errors are logged to stderr
+// but never abort server startup.
+func MaybeAutoInstall() {
 	if os.Getenv("AUTO_INSTALL_HOOKS") == "false" {
 		return
 	}
+	maybeAutoInstallClaude()
+	maybeAutoInstallOpenCode()
+	maybeAutoInstallCodex()
+}
 
+// maybeAutoInstallClaude installs shell-command hooks into ~/.claude/settings.json.
+func maybeAutoInstallClaude() {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return
 	}
-	claudeDir := filepath.Join(home, ".claude")
-	if _, err := os.Stat(claudeDir); os.IsNotExist(err) {
-		return // Claude Code not detected
+	if _, err := os.Stat(filepath.Join(home, ".claude")); os.IsNotExist(err) {
+		return
 	}
 
 	path := claudeSettingsPath()
-
 	sf := settingsFile{}
 	if data, err := os.ReadFile(path); err == nil {
 		if jsonErr := json.Unmarshal(data, &sf); jsonErr != nil {
-			fmt.Fprintf(os.Stderr, "mnemo: auto-install hooks: parse %s: %v\n", path, jsonErr)
+			fmt.Fprintf(os.Stderr, "mnemo: claude auto-install: parse %s: %v\n", path, jsonErr)
 			return
 		}
 	}
@@ -149,13 +168,13 @@ func MaybeAutoInstallHooks() {
 	hs := hooksSection{}
 	if raw, ok := sf["hooks"]; ok {
 		if jsonErr := json.Unmarshal(raw, &hs); jsonErr != nil {
-			fmt.Fprintf(os.Stderr, "mnemo: auto-install hooks: parse hooks: %v\n", jsonErr)
+			fmt.Fprintf(os.Stderr, "mnemo: claude auto-install: parse hooks: %v\n", jsonErr)
 			return
 		}
 	}
 
 	if !installAllMnemoHooks(hs) {
-		return // already installed
+		return
 	}
 
 	if len(hs) == 0 {
@@ -167,20 +186,146 @@ func MaybeAutoInstallHooks() {
 
 	out, err := json.MarshalIndent(sf, "", "  ")
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "mnemo: auto-install hooks: marshal: %v\n", err)
+		fmt.Fprintf(os.Stderr, "mnemo: claude auto-install: marshal: %v\n", err)
 		return
 	}
 	out = append(out, '\n')
 
 	if mkErr := os.MkdirAll(filepath.Dir(path), 0o755); mkErr != nil {
-		fmt.Fprintf(os.Stderr, "mnemo: auto-install hooks: mkdir: %v\n", mkErr)
+		fmt.Fprintf(os.Stderr, "mnemo: claude auto-install: mkdir: %v\n", mkErr)
 		return
 	}
 	if writeErr := os.WriteFile(path, out, 0o644); writeErr != nil {
-		fmt.Fprintf(os.Stderr, "mnemo: auto-install hooks: write: %v\n", writeErr)
+		fmt.Fprintf(os.Stderr, "mnemo: claude auto-install: write: %v\n", writeErr)
+	}
+}
+
+// maybeAutoInstallOpenCode registers mnemo as an MCP server in
+// ~/.config/opencode/opencode.json and injects memory instructions.
+func maybeAutoInstallOpenCode() {
+	home, err := os.UserHomeDir()
+	if err != nil {
 		return
 	}
-	fmt.Fprintln(os.Stderr, "mnemo: auto-installed Claude Code hooks (restart Claude to activate)")
+	dir := filepath.Join(home, ".config", "opencode")
+	if _, err := os.Stat(dir); os.IsNotExist(err) {
+		return
+	}
+
+	configPath := filepath.Join(dir, "opencode.json")
+
+	// Read existing config (treat missing as empty object).
+	raw := settingsFile{}
+	if data, err := os.ReadFile(configPath); err == nil {
+		if jsonErr := json.Unmarshal(data, &raw); jsonErr != nil {
+			fmt.Fprintf(os.Stderr, "mnemo: opencode auto-install: parse %s: %v\n", configPath, jsonErr)
+			return
+		}
+	}
+
+	changed := false
+
+	// Register MCP server under "mcp.mnemo".
+	mcpMap := map[string]any{}
+	if existing, ok := raw["mcp"]; ok {
+		_ = json.Unmarshal(existing, &mcpMap)
+	}
+	if _, alreadySet := mcpMap["mnemo"]; !alreadySet {
+		mcpMap["mnemo"] = map[string]any{
+			"type":    "local",
+			"command": []string{"mnemo"},
+			"enabled": true,
+		}
+		b, _ := json.Marshal(mcpMap)
+		raw["mcp"] = b
+		changed = true
+	}
+
+	// Register instructions file path.
+	instrFile := filepath.Join(dir, "mnemo.md")
+	instrPaths := []string{}
+	if existing, ok := raw["instructions"]; ok {
+		_ = json.Unmarshal(existing, &instrPaths)
+	}
+	hasInstr := false
+	for _, p := range instrPaths {
+		if p == instrFile {
+			hasInstr = true
+			break
+		}
+	}
+	if !hasInstr {
+		instrPaths = append(instrPaths, instrFile)
+		b, _ := json.Marshal(instrPaths)
+		raw["instructions"] = b
+		changed = true
+	}
+
+	// Write mnemo.md if missing.
+	if _, err := os.Stat(instrFile); os.IsNotExist(err) {
+		if writeErr := os.WriteFile(instrFile, []byte(mnemoMemoryInstructions), 0o644); writeErr != nil {
+			fmt.Fprintf(os.Stderr, "mnemo: opencode auto-install: write instructions: %v\n", writeErr)
+		}
+	}
+
+	if !changed {
+		return
+	}
+
+	out, err := json.MarshalIndent(raw, "", "  ")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "mnemo: opencode auto-install: marshal: %v\n", err)
+		return
+	}
+	out = append(out, '\n')
+	if writeErr := os.WriteFile(configPath, out, 0o644); writeErr != nil {
+		fmt.Fprintf(os.Stderr, "mnemo: opencode auto-install: write config: %v\n", writeErr)
+	}
+}
+
+// maybeAutoInstallCodex registers mnemo as an MCP server in ~/.codex/config.toml
+// and appends memory instructions to ~/.codex/AGENTS.md.
+func maybeAutoInstallCodex() {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return
+	}
+	dir := filepath.Join(home, ".codex")
+	if _, err := os.Stat(dir); os.IsNotExist(err) {
+		return
+	}
+
+	// Register MCP in config.toml (string-based append, no TOML library).
+	tomlPath := filepath.Join(dir, "config.toml")
+	tomlContent := ""
+	if data, err := os.ReadFile(tomlPath); err == nil {
+		tomlContent = string(data)
+	}
+	if !strings.Contains(tomlContent, "[mcp_servers.mnemo]") {
+		entry := "\n[mcp_servers.mnemo]\ncommand = \"mnemo\"\nargs = []\nenabled = true\n"
+		tomlContent += entry
+		if writeErr := os.WriteFile(tomlPath, []byte(tomlContent), 0o644); writeErr != nil {
+			fmt.Fprintf(os.Stderr, "mnemo: codex auto-install: write config.toml: %v\n", writeErr)
+		}
+	}
+
+	// Inject memory instructions into AGENTS.md.
+	agentsPath := filepath.Join(dir, "AGENTS.md")
+	agentsContent := ""
+	if data, err := os.ReadFile(agentsPath); err == nil {
+		agentsContent = string(data)
+	}
+	if !strings.Contains(agentsContent, "mnemo") {
+		agentsContent += mnemoMemoryInstructions
+		if writeErr := os.WriteFile(agentsPath, []byte(agentsContent), 0o644); writeErr != nil {
+			fmt.Fprintf(os.Stderr, "mnemo: codex auto-install: write AGENTS.md: %v\n", writeErr)
+		}
+	}
+}
+
+func claudeSettingsPath() string {
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".claude", "settings.json")
 }
 
 func printHookActions(verb string) {

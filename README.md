@@ -12,14 +12,14 @@
     <img src="https://img.shields.io/github/v/release/kyungw00k/mnemo" alt="Latest Release">
   </a>
   <a href="https://go.dev/">
-    <img src="https://img.shields.io/badge/go-1.22+-00ADD8?logo=go" alt="Go 1.22+">
+    <img src="https://img.shields.io/badge/go-1.23+-00ADD8?logo=go" alt="Go 1.23+">
   </a>
   <a href="LICENSE">
     <img src="https://img.shields.io/github/license/kyungw00k/mnemo" alt="License">
   </a>
 </p>
 
-Persistent MCP memory server for Claude Code and opencode — single Go binary, vector search in SQLite and PostgreSQL.
+Persistent MCP memory server for Claude Code, opencode, and Codex CLI — single Go binary, vector search in SQLite and PostgreSQL.
 
 ---
 
@@ -32,9 +32,15 @@ go install github.com/kyungw00k/mnemo/cmd/mnemo@latest
 
 Memory is stored at `~/.mnemo/memory.db`.
 
-### Configure Claude Code
+When mnemo starts as an MCP server, it **automatically detects** Claude Code, opencode, and Codex CLI and registers itself — no manual configuration needed.
 
-**1. MCP (stdio)** — add to `~/.claude/claude_desktop_config.json`:
+---
+
+## Setup
+
+### Claude Code
+
+**Auto-install** (recommended) — just add mnemo as an MCP server and hooks are installed automatically on first run:
 
 ```json
 {
@@ -47,29 +53,56 @@ Memory is stored at `~/.mnemo/memory.db`.
 }
 ```
 
-No persistent server needed — Claude spawns mnemo per session.
+**Manual hook install**:
 
-**2. Hooks (automatic memory)** — add to `~/.claude/settings.json`:
+```bash
+mnemo hook install          # installs hooks into ~/.claude/settings.json
+mnemo hook install --dry-run    # preview changes without writing
+mnemo hook install --uninstall  # remove hooks
+```
+
+Hooks installed:
+
+| Event | Trigger | Action |
+|-------|---------|--------|
+| `SessionStart` | startup / resume / compact | Inject recent decisions and notes as context |
+| `PreCompact` | before context compaction | Save session snapshot to survive compaction |
+| `PostToolUse` | after Bash commands | Record build/test results as observations |
+| `Stop` | session end | Save session note and extract key facts |
+
+### opencode
+
+Add mnemo as an MCP server in `~/.config/opencode/opencode.json`:
 
 ```json
 {
-  "hooks": {
-    "SessionStart": [
-      { "matcher": "startup|resume",
-        "hooks": [{ "type": "command", "command": "mnemo hook session-start" }] }
-    ],
-    "PostToolUse": [
-      { "matcher": "Edit|Write|Bash",
-        "hooks": [{ "type": "command", "command": "mnemo hook observe" }] }
-    ],
-    "Stop": [
-      { "hooks": [{ "type": "command", "command": "mnemo hook session-end" }] }
-    ]
-  }
+  "mcp": {
+    "mnemo": {
+      "type": "local",
+      "command": ["mnemo"],
+      "enabled": true
+    }
+  },
+  "instructions": ["~/.config/opencode/mnemo.md"]
 }
 ```
 
-**3. Dashboard (on-demand)**:
+Or simply start mnemo as an MCP server — it auto-detects opencode and configures itself.
+
+### Codex CLI
+
+Add mnemo as an MCP server in `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.mnemo]
+command = "mnemo"
+args = []
+enabled = true
+```
+
+Or simply start mnemo as an MCP server — it auto-detects Codex and configures itself (also injects memory instructions into `~/.codex/AGENTS.md`).
+
+### Dashboard
 
 ```bash
 mnemo dashboard          # opens http://localhost:8765
@@ -137,6 +170,7 @@ make build
 | `EMBEDDING_API_KEY` | _(empty)_ | API key (empty for local Ollama/LM Studio) |
 | `EMBEDDING_MODEL` | `nomic-embed-text` | Embedding model name |
 | `EMBEDDING_DIMENSIONS` | `768` | Vector dimensions |
+| `AUTO_INSTALL_HOOKS` | `true` | Set to `false` to disable auto-configuration |
 
 <details>
 <summary>Optional: Advanced Configuration</summary>
@@ -169,20 +203,24 @@ mnemo dashboard --port 9000
 
 ## CLI Subcommands
 
-No server needed — all subcommands access the DB directly.
-
 ```bash
-# Hooks (called by Claude Code automatically via settings.json)
-mnemo hook session-start   # returns additionalContext with recent decisions + notes
-mnemo hook session-end     # saves session note; extracts facts if ENABLE_AUTO_EXTRACT=true
-mnemo hook observe         # records Edit/Write/Bash tool usage as observations
+# Hook management (Claude Code)
+mnemo hook install           # auto-configure ~/.claude/settings.json
+mnemo hook install --dry-run
+mnemo hook install --uninstall
+
+# Hooks (called automatically by Claude Code)
+mnemo hook session-start     # returns additionalContext with recent decisions + notes
+mnemo hook session-end       # saves session note; extracts facts if ENABLE_AUTO_EXTRACT=true
+mnemo hook observe           # records Bash tool results as observations
+mnemo hook pre-compact       # saves context snapshot before compaction
 
 # Interactive
 mnemo search "authentication strategy"
 mnemo search "database" --category decision --limit 5
 mnemo save decision auth_strategy "JWT with refresh tokens"
 
-# Dashboard (on-demand SSE server)
+# Dashboard
 mnemo dashboard
 mnemo dashboard --port 9000
 ```
@@ -194,7 +232,8 @@ mnemo dashboard --port 9000
 - **Dual database**: SQLite (sqlite-vec) or PostgreSQL (pgvector) for vector search
 - **OpenAI-compatible embeddings**: Works with Ollama, LM Studio, OpenAI, or any `/v1/embeddings` endpoint
 - **Dual transport**: stdio (per-session) and SSE (persistent HTTP) — run both simultaneously
-- **Hook automation**: Session-start context injection, session-end note saving, tool-use observation
+- **Auto-configuration**: Detects Claude Code, opencode, and Codex CLI on first run and self-configures
+- **Hook automation**: Session-start context injection, pre-compact snapshots, session-end note saving, build observation
 - **Git context**: Auto-detects `git remote origin` for project tagging (on by default)
 - **Host isolation**: Memories scoped per machine via `HOST_ID`
 - **Single static binary**: No runtime dependencies (CGO at build time only)
@@ -227,35 +266,6 @@ mnemo dashboard --port 9000
 | `memory_import` | Always available |
 
 </details>
-
----
-
-## Usage with Other AI Tools
-
-**opencode / Cursor / Codex** — add MCP to your tool's config:
-
-```json
-{
-  "mcpServers": {
-    "mnemo": {
-      "command": "mnemo",
-      "env": { "TRANSPORT": "stdio" }
-    }
-  }
-}
-```
-
-Or use SSE if a persistent server is preferred:
-
-```json
-{
-  "mcp": {
-    "mnemo": { "type": "sse", "url": "http://localhost:8765/sse" }
-  }
-}
-```
-
-See [`AGENT_INSTRUCTIONS.md.example`](AGENT_INSTRUCTIONS.md.example) for hook setup and AI memory protocol templates.
 
 ---
 
