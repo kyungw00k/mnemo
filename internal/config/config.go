@@ -69,7 +69,7 @@ func Load() (*Config, error) {
 
 	// Phase 13: boolean flags
 	cfg.EnableAutoExtract = parseBool(getEnv("ENABLE_AUTO_EXTRACT", ""))
-	cfg.EnableGitContext = parseBool(getEnv("ENABLE_GIT_CONTEXT", ""))
+	cfg.EnableGitContext = parseBool(getEnv("ENABLE_GIT_CONTEXT", "true"))
 
 	// Phase 13: MEMORY_TTL_DAYS
 	ttlStr := getEnv("MEMORY_TTL_DAYS", "0")
