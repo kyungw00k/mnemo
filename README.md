@@ -28,26 +28,52 @@ Persistent MCP memory server for Claude Code and opencode — single Go binary, 
 ```bash
 # Install
 go install github.com/kyungw00k/mnemo/cmd/mnemo@latest
-
-# Start (SSE mode on port 8765)
-TRANSPORT=sse mnemo
 ```
 
-Memory is stored at `~/.mnemo/memory.db`. Dashboard available at `http://localhost:8765`.
+Memory is stored at `~/.mnemo/memory.db`.
 
 ### Configure Claude Code
 
-Add to `~/.config/claude/mcp.json`:
+**1. MCP (stdio)** — add to `~/.claude/claude_desktop_config.json`:
 
 ```json
 {
   "mcpServers": {
     "mnemo": {
-      "type": "sse",
-      "url": "http://localhost:8765/sse"
+      "command": "mnemo",
+      "env": { "TRANSPORT": "stdio" }
     }
   }
 }
+```
+
+No persistent server needed — Claude spawns mnemo per session.
+
+**2. Hooks (automatic memory)** — add to `~/.claude/settings.json`:
+
+```json
+{
+  "hooks": {
+    "SessionStart": [
+      { "matcher": "startup|resume",
+        "hooks": [{ "type": "command", "command": "mnemo hook session-start" }] }
+    ],
+    "PostToolUse": [
+      { "matcher": "Edit|Write|Bash",
+        "hooks": [{ "type": "command", "command": "mnemo hook observe" }] }
+    ],
+    "Stop": [
+      { "hooks": [{ "type": "command", "command": "mnemo hook session-end" }] }
+    ]
+  }
+}
+```
+
+**3. Dashboard (on-demand)**:
+
+```bash
+mnemo dashboard          # opens http://localhost:8765
+mnemo dashboard --port 9000
 ```
 
 ---
@@ -118,11 +144,11 @@ make build
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `HOST_ID` | `<os.Hostname()>` | Memory isolation key (for Docker) |
-| `ENABLE_AUTO_EXTRACT` | `false` | Enable LLM auto-extraction tool |
-| `ENABLE_GIT_CONTEXT` | `false` | Auto-detect git repo for project tagging |
+| `ENABLE_GIT_CONTEXT` | `true` | Auto-detect git remote for project tagging |
+| `ENABLE_AUTO_EXTRACT` | `false` | LLM-based fact extraction on session-end |
 | `MEMORY_TTL_DAYS` | `0` (off) | Auto-expire memories after N days |
 | `EXTRACT_LLM_BASE_URL` | _(same as EMBEDDING)_ | LLM endpoint for extraction |
-| `EXTRACT_LLM_MODEL` | `llama3` | Model name for extraction |
+| `EXTRACT_LLM_MODEL` | `gpt-4.1-nano` | Model name for extraction |
 
 </details>
 
@@ -130,10 +156,9 @@ make build
 
 ## Dashboard
 
-Start with SSE transport and visit `http://localhost:8765`:
-
 ```bash
-TRANSPORT=sse mnemo
+mnemo dashboard          # opens http://localhost:8765
+mnemo dashboard --port 9000
 ```
 
 ![mnemo dashboard](docs/screenshot.png)
@@ -142,11 +167,35 @@ TRANSPORT=sse mnemo
 
 ---
 
+## CLI Subcommands
+
+No server needed — all subcommands access the DB directly.
+
+```bash
+# Hooks (called by Claude Code automatically via settings.json)
+mnemo hook session-start   # returns additionalContext with recent decisions + notes
+mnemo hook session-end     # saves session note; extracts facts if ENABLE_AUTO_EXTRACT=true
+mnemo hook observe         # records Edit/Write/Bash tool usage as observations
+
+# Interactive
+mnemo search "authentication strategy"
+mnemo search "database" --category decision --limit 5
+mnemo save decision auth_strategy "JWT with refresh tokens"
+
+# Dashboard (on-demand SSE server)
+mnemo dashboard
+mnemo dashboard --port 9000
+```
+
+---
+
 ## Features
 
 - **Dual database**: SQLite (sqlite-vec) or PostgreSQL (pgvector) for vector search
 - **OpenAI-compatible embeddings**: Works with Ollama, LM Studio, OpenAI, or any `/v1/embeddings` endpoint
 - **Dual transport**: stdio (per-session) and SSE (persistent HTTP) — run both simultaneously
+- **Hook automation**: Session-start context injection, session-end note saving, tool-use observation
+- **Git context**: Auto-detects `git remote origin` for project tagging (on by default)
 - **Host isolation**: Memories scoped per machine via `HOST_ID`
 - **Single static binary**: No runtime dependencies (CGO at build time only)
 
@@ -183,20 +232,30 @@ TRANSPORT=sse mnemo
 
 ## Usage with Other AI Tools
 
-**opencode** (`.cursorrules` or `AGENTS.md`):
+**opencode / Cursor / Codex** — add MCP to your tool's config:
 
 ```json
 {
-  "mcp": {
+  "mcpServers": {
     "mnemo": {
-      "type": "sse",
-      "url": "http://localhost:8765/sse"
+      "command": "mnemo",
+      "env": { "TRANSPORT": "stdio" }
     }
   }
 }
 ```
 
-See [`AGENT_INSTRUCTIONS.md.example`](AGENT_INSTRUCTIONS.md.example) for AI memory protocol templates.
+Or use SSE if a persistent server is preferred:
+
+```json
+{
+  "mcp": {
+    "mnemo": { "type": "sse", "url": "http://localhost:8765/sse" }
+  }
+}
+```
+
+See [`AGENT_INSTRUCTIONS.md.example`](AGENT_INSTRUCTIONS.md.example) for hook setup and AI memory protocol templates.
 
 ---
 
