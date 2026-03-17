@@ -5,6 +5,7 @@ import type {
   SearchResponse,
   GraphData,
   NoteItem,
+  MemoryItem,
 } from '../types';
 
 async function apiFetch<T>(path: string): Promise<T> {
@@ -69,4 +70,8 @@ export function fetchGraph(params: { host?: string }): Promise<GraphData> {
 
 export function fetchNoteDetail(id: number): Promise<NoteItem> {
   return apiFetch<NoteItem>(`/api/notes/${id}`);
+}
+
+export function fetchMemoryDetail(id: number): Promise<MemoryItem> {
+  return apiFetch<MemoryItem>(`/api/memories/${id}`);
 }

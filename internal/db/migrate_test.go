@@ -27,7 +27,7 @@ func TestMigrate_SQLite_TablesExist(t *testing.T) {
 	}
 
 	// Verify core tables exist.
-	tables := []string{"memories", "notes", "schema_migrations", "memories_fts", "notes_fts"}
+	tables := []string{"memories", "notes", "schema_migrations"}
 	for _, table := range tables {
 		row := conn.QueryRow(context.Background(),
 			"SELECT COUNT(*) FROM sqlite_master WHERE type IN ('table','shadow') AND name=?", table)

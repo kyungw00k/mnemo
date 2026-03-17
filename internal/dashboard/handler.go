@@ -244,6 +244,63 @@ func (s *Server) queryMemories(ctx context.Context, host, category string, limit
 	return items, total, rows.Err()
 }
 
+// HandleMemoryDetail handles GET /api/memories/:id.
+func (s *Server) HandleMemoryDetail(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Extract ID from path: /api/memories/123
+	path := r.URL.Path
+	if !strings.HasPrefix(path, "/api/memories/") {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+
+	idStr := strings.TrimPrefix(path, "/api/memories/")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil || id <= 0 {
+		http.Error(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+
+	ctx := r.Context()
+	memory, err := s.getMemoryByID(ctx, id)
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			http.Error(w, "memory not found", http.StatusNotFound)
+			return
+		}
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, memory)
+}
+
+func (s *Server) getMemoryByID(ctx context.Context, id int64) (*memoryItem, error) {
+	var q string
+	if s.db.IsSQLite() {
+		q = `SELECT id, host, category, memory_key, memory_value, COALESCE(metadata,''), created_at, updated_at
+		     FROM memories WHERE id=? AND del_yn='N'`
+	} else {
+		q = `SELECT id, host, category, memory_key, memory_value, COALESCE(metadata,''), created_at, updated_at
+		     FROM memories WHERE id=$1 AND del_yn='N'`
+	}
+
+	var m memoryItem
+	var createdAt, updatedAt time.Time
+	err := s.db.QueryRow(ctx, q, id).Scan(&m.ID, &m.Host, &m.Category, &m.Key, &m.Value, &m.Metadata, &createdAt, &updatedAt)
+	if err != nil {
+		return nil, fmt.Errorf("get memory by id: %w", err)
+	}
+
+	m.CreatedAt = createdAt.Format(time.RFC3339)
+	m.UpdatedAt = updatedAt.Format(time.RFC3339)
+	return &m, nil
+}
+
 // --- /api/notes ---
 
 type noteItem struct {

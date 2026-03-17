@@ -188,34 +188,40 @@ func (r *MemoryRepository) sqliteVectorSearch(ctx context.Context, host, categor
 	return scanMemoryResults(rows)
 }
 
-// TextSearch performs a full-text search using FTS5 (SQLite) or LIKE (PostgreSQL fallback).
+// TextSearch performs a text search using LIKE (SQLite and PostgreSQL).
+// FTS5 removed in Phase 14: replaced by sqlite-vec vector search.
 func (r *MemoryRepository) TextSearch(ctx context.Context, host, category, query string, limit int) ([]MemorySearchResult, error) {
+	like := "%" + query + "%"
+	var sqlQuery string
+	var args []any
+	var rows *sql.Rows
+	var err error
+
 	if r.db.IsSQLite() {
-		sqlQuery := `SELECT m.id, m.category, m.memory_key, m.memory_value, 1.0 as similarity, m.created_at
-		             FROM memories m
-		             JOIN memories_fts f ON m.id = f.rowid
-		             WHERE f.memories_fts MATCH ?
-		             AND m.del_yn='N' AND m.host=?
-		             AND (m.expires_at IS NULL OR m.expires_at > datetime('now'))`
-		args := []any{query, host}
+		sqlQuery = `SELECT id, category, memory_key, memory_value, 1.0 as similarity, created_at
+		             FROM memories
+		             WHERE del_yn='N' AND host=?
+		             AND (memory_key LIKE ? OR memory_value LIKE ?)
+		             AND (expires_at IS NULL OR expires_at > datetime('now'))`
+		args = []any{host, like, like}
 		if category != "" {
-			sqlQuery += " AND m.category=?"
+			sqlQuery += " AND category=?"
 			args = append(args, category)
 		}
-		sqlQuery += " ORDER BY rank LIMIT ?"
+		sqlQuery += " ORDER BY updated_at DESC LIMIT ?"
 		args = append(args, limit)
 
-		rows, err := r.db.Query(ctx, sqlQuery, args...)
+		rows, err = r.db.Query(ctx, sqlQuery, args...)
 		if err != nil {
-			return nil, fmt.Errorf("fts5 search memories: %w", err)
+			return nil, fmt.Errorf("like search memories: %w", err)
 		}
 		defer rows.Close()
 		return scanMemoryResults(rows)
 	}
 
 	// PostgreSQL LIKE fallback.
-	like := "%" + query + "%"
-	sqlQuery := `SELECT id, category, memory_key, memory_value, 1.0 as similarity, created_at
+	like = "%" + query + "%"
+	sqlQuery = `SELECT id, category, memory_key, memory_value, 1.0 as similarity, created_at
 	             FROM memories
 	             WHERE del_yn='N' AND host=$1
 	             AND ($2='' OR category=$2)
@@ -223,7 +229,7 @@ func (r *MemoryRepository) TextSearch(ctx context.Context, host, category, query
 	             AND (expires_at IS NULL OR expires_at > NOW())
 	             ORDER BY updated_at DESC
 	             LIMIT $4`
-	rows, err := r.db.Query(ctx, sqlQuery, host, category, like, limit)
+	rows, err = r.db.Query(ctx, sqlQuery, host, category, like, limit)
 	if err != nil {
 		return nil, fmt.Errorf("like search memories: %w", err)
 	}

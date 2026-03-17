@@ -35,7 +35,9 @@ func StartSSE(ctx context.Context, s *mcpserver.Server, port string, dash *dashb
 
 	// Dashboard REST API endpoints (registered before catch-all so they take priority).
 	// Note: /api/notes/ must be registered before /api/notes for proper routing.
+	// Note: /api/memories/ must be registered before /api/memories for proper routing.
 	mux.HandleFunc("/api/stats", dash.HandleStats)
+	mux.HandleFunc("/api/memories/", dash.HandleMemoryDetail)
 	mux.HandleFunc("/api/memories", dash.HandleMemories)
 	mux.HandleFunc("/api/notes/", dash.HandleNoteDetail)
 	mux.HandleFunc("/api/notes", dash.HandleNotes)

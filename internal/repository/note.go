@@ -173,34 +173,40 @@ func (r *NoteRepository) sqliteVectorSearch(ctx context.Context, host, project s
 	return scanNoteResults(rows)
 }
 
-// TextSearch performs a full-text search on notes.
+// TextSearch performs a text search on notes using LIKE.
+// FTS5 removed in Phase 14: replaced by sqlite-vec vector search.
 func (r *NoteRepository) TextSearch(ctx context.Context, host, project, query string, limit int) ([]NoteSearchResult, error) {
+	like := "%" + query + "%"
+	var sqlQuery string
+	var args []any
+	var rows *sql.Rows
+	var err error
+
 	if r.db.IsSQLite() {
-		sqlQuery := `SELECT n.id, COALESCE(n.project,''), n.title, n.content, COALESCE(n.tags,''), 1.0 as similarity, n.created_at
-		             FROM notes n
-		             JOIN notes_fts f ON n.id = f.rowid
-		             WHERE f.notes_fts MATCH ?
-		             AND n.del_yn='N' AND n.host=?
-		             AND (n.expires_at IS NULL OR n.expires_at > datetime('now'))`
-		args := []any{query, host}
+		sqlQuery = `SELECT id, COALESCE(project,''), title, content, COALESCE(tags,''), 1.0 as similarity, created_at
+		             FROM notes
+		             WHERE del_yn='N' AND host=?
+		             AND (title LIKE ? OR content LIKE ?)
+		             AND (expires_at IS NULL OR expires_at > datetime('now'))`
+		args = []any{host, like, like}
 		if project != "" {
-			sqlQuery += " AND n.project=?"
+			sqlQuery += " AND project=?"
 			args = append(args, project)
 		}
-		sqlQuery += " ORDER BY rank LIMIT ?"
+		sqlQuery += " ORDER BY updated_at DESC LIMIT ?"
 		args = append(args, limit)
 
-		rows, err := r.db.Query(ctx, sqlQuery, args...)
+		rows, err = r.db.Query(ctx, sqlQuery, args...)
 		if err != nil {
-			return nil, fmt.Errorf("fts5 search notes: %w", err)
+			return nil, fmt.Errorf("like search notes: %w", err)
 		}
 		defer rows.Close()
 		return scanNoteResults(rows)
 	}
 
-	// PostgreSQL LIKE fallback.
-	like := "%" + query + "%"
-	sqlQuery := `SELECT id, COALESCE(project,''), title, content, COALESCE(tags,''), 1.0 as similarity, created_at
+	// PostgreSQL ILIKE fallback.
+	like = "%" + query + "%"
+	sqlQuery = `SELECT id, COALESCE(project,''), title, content, COALESCE(tags,''), 1.0 as similarity, created_at
 	             FROM notes
 	             WHERE del_yn='N' AND host=$1
 	             AND ($2='' OR project=$2)
@@ -208,7 +214,7 @@ func (r *NoteRepository) TextSearch(ctx context.Context, host, project, query st
 	             AND (expires_at IS NULL OR expires_at > NOW())
 	             ORDER BY updated_at DESC
 	             LIMIT $4`
-	rows, err := r.db.Query(ctx, sqlQuery, host, project, like, limit)
+	rows, err = r.db.Query(ctx, sqlQuery, host, project, like, limit)
 	if err != nil {
 		return nil, fmt.Errorf("like search notes: %w", err)
 	}

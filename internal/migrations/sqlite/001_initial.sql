@@ -23,20 +23,4 @@ CREATE TABLE IF NOT EXISTS notes (
     del_yn TEXT DEFAULT 'N'
 );
 
-CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(
-    memory_key, memory_value, category,
-    content='memories', content_rowid='id'
-);
-
-CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(
-    title, content, tags,
-    content='notes', content_rowid='id'
-);
-
-CREATE TRIGGER IF NOT EXISTS memories_ai AFTER INSERT ON memories BEGIN
-    INSERT INTO memories_fts(rowid, memory_key, memory_value, category) VALUES (new.id, new.memory_key, new.memory_value, new.category);
-END;
-
-CREATE TRIGGER IF NOT EXISTS notes_ai AFTER INSERT ON notes BEGIN
-    INSERT INTO notes_fts(rowid, title, content, tags) VALUES (new.id, new.title, new.content, COALESCE(new.tags, ''));
-END;
+-- FTS5 removed in Phase 14: replaced by sqlite-vec vector search

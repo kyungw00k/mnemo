@@ -64,6 +64,26 @@ By default (`TRANSPORT=both`), mnemo runs stdio and SSE simultaneously. Claude C
 
 ---
 
+## Dashboard
+
+mnemo includes a built-in web dashboard for browsing memories and notes. Start the server with SSE transport enabled and visit `http://localhost:8765`:
+
+```bash
+TRANSPORT=sse mnemo
+```
+
+![mnemo dashboard](docs/screenshot.png)
+
+### Dashboard Features
+
+- **Memory & Note Browser**: View all memories and notes with search and filtering
+- **Markdown Rendering**: Full markdown support with syntax highlighting
+- **Detail View**: Click any row to view full content in a modal
+- **Knowledge Graph**: Visualize relationships between categories and memories
+- **Real-time Search**: Full-text search across all content
+
+---
+
 ## Quickstart (SQLite — no setup required)
 
 ### 1. Download the binary

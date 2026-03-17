@@ -5,6 +5,7 @@ import { StatsCard } from '../components/StatsCard';
 import { MemoryTable } from '../components/MemoryTable';
 import { NoteList } from '../components/NoteList';
 import { NoteDetail } from '../components/NoteDetail';
+import { MemoryDetail } from '../components/MemoryDetail';
 import { SearchBar } from '../components/SearchBar';
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -44,6 +45,7 @@ export function DashboardPage() {
   const [notesError, setNotesError] = useState<string | null>(null);
 
   const [selectedNoteId, setSelectedNoteId] = useState<number | null>(null);
+  const [selectedMemoryId, setSelectedMemoryId] = useState<number | null>(null);
 
   // Fetch stats once
   useEffect(() => {
@@ -142,7 +144,12 @@ export function DashboardPage() {
 
       {/* Recent memories */}
       <Section title="Recent Memories">
-        <MemoryTable items={memories} loading={memoriesLoading} error={memoriesError} />
+        <MemoryTable
+          items={memories}
+          loading={memoriesLoading}
+          error={memoriesError}
+          onMemoryClick={setSelectedMemoryId}
+        />
       </Section>
 
       {/* Recent notes */}
@@ -160,6 +167,12 @@ export function DashboardPage() {
     <NoteDetail
       noteId={selectedNoteId}
       onClose={() => setSelectedNoteId(null)}
+    />
+
+    {/* Memory detail modal */}
+    <MemoryDetail
+      memoryId={selectedMemoryId}
+      onClose={() => setSelectedMemoryId(null)}
     />
     </>
   );

@@ -4,6 +4,7 @@ interface MemoryTableProps {
   items: MemoryItem[];
   loading: boolean;
   error: string | null;
+  onMemoryClick?: (id: number) => void;
 }
 
 function formatDate(iso: string): string {
@@ -33,7 +34,7 @@ function categoryColor(cat: string): string {
   return CATEGORY_COLORS[cat.toLowerCase()] ?? '#64748b';
 }
 
-export function MemoryTable({ items, loading, error }: MemoryTableProps) {
+export function MemoryTable({ items, loading, error, onMemoryClick }: MemoryTableProps) {
   if (loading) {
     return (
       <div style={{ padding: 24, color: 'var(--text-muted)', textAlign: 'center' }}>
@@ -82,7 +83,9 @@ export function MemoryTable({ items, loading, error }: MemoryTableProps) {
             <tr key={m.id} style={{
               borderBottom: '1px solid var(--border)',
               transition: 'background 0.1s',
+              cursor: onMemoryClick ? 'pointer' : 'default',
             }}
+              onClick={() => onMemoryClick?.(m.id)}
               onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
               onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
             >
