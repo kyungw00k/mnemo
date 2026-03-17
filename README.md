@@ -1,7 +1,29 @@
-# mnemo
+<p align="center">
+  <img src="logo.svg" alt="mnemo logo" width="96" height="96">
+</p>
 
-[![CI](https://github.com/kyungw00k/mnemo/actions/workflows/ci.yml/badge.svg)](https://github.com/kyungw00k/mnemo/actions/workflows/ci.yml)
-[![Latest Release](https://img.shields.io/github/v/release/kyungw00k/mnemo)](https://github.com/kyungw00k/mnemo/releases)
+<h1 align="center">mnemo</h1>
+
+<p align="center">
+  <a href="https://github.com/kyungw00k/mnemo/actions/workflows/ci.yml">
+    <img src="https://github.com/kyungw00k/mnemo/actions/workflows/ci.yml/badge.svg" alt="CI">
+  </a>
+  <a href="https://github.com/kyungw00k/mnemo/releases">
+    <img src="https://img.shields.io/github/v/release/kyungw00k/mnemo" alt="Latest Release">
+  </a>
+  <a href="https://go.dev/">
+    <img src="https://img.shields.io/badge/go-1.22+-00ADD8?logo=go" alt="Go 1.22+">
+  </a>
+  <a href="https://sqlite.org/">
+    <img src="https://img.shields.io/badge/SQLite-sqlite--vec-003B57?logo=sqlite" alt="SQLite">
+  </a>
+  <a href="https://www.postgresql.org/">
+    <img src="https://img.shields.io/badge/PostgreSQL-pgvector-4169E1?logo=postgresql" alt="PostgreSQL">
+  </a>
+  <a href="LICENSE">
+    <img src="https://img.shields.io/github/license/kyungw00k/mnemo" alt="License">
+  </a>
+</p>
 [![Go 1.22+](https://img.shields.io/badge/go-1.22+-00ADD8?logo=go)](https://go.dev/)
 [![License](https://img.shields.io/github/license/kyungw00k/mnemo)](LICENSE)
 [![SQLite](https://img.shields.io/badge/SQLite-sqlite--vec-003B57?logo=sqlite)](https://sqlite.org/)

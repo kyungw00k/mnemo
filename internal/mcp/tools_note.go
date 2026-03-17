@@ -119,6 +119,39 @@ func registerNoteTools(s *server.MCPServer, noteSvc *service.NoteService, hostID
 		return mcp.NewToolResultText(strings.TrimRight(sb.String(), "\n")), nil
 	})
 
+	// note_get
+	noteGetTool := mcp.NewTool("note_get",
+		mcp.WithDescription("Get a single note by its ID with full content"),
+		mcp.WithNumber("id", mcp.Required(), mcp.Description("Note ID to retrieve")),
+	)
+	s.AddTool(noteGetTool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		id := int64(req.GetFloat("id", 0))
+		if id <= 0 {
+			return mcp.NewToolResultError("valid id is required"), nil
+		}
+
+		note, err := noteSvc.GetByID(ctx, id)
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("get failed: %v", err)), nil
+		}
+
+		tags := note.Tags
+		if tags == "[]" || tags == "" {
+			tags = "(no tags)"
+		}
+		projectStr := note.Project
+		if projectStr == "" {
+			projectStr = "(no project)"
+		}
+
+		result := fmt.Sprintf("[%s] %s (id=%d)\nTags: %s\nCreated: %s\nUpdated: %s\n\n---\n\n%s",
+			projectStr, note.Title, note.ID, tags,
+			note.CreatedAt.Format("2006-01-02 15:04:05"),
+			note.UpdatedAt.Format("2006-01-02 15:04:05"),
+			note.Content)
+		return mcp.NewToolResultText(result), nil
+	})
+
 	// note_delete
 	noteDeleteTool := mcp.NewTool("note_delete",
 		mcp.WithDescription("Soft-delete a note by its ID"),

@@ -272,6 +272,32 @@ func (r *NoteRepository) ListByProject(ctx context.Context, host, project string
 	return results, rows.Err()
 }
 
+// GetByID retrieves a single note by its ID.
+func (r *NoteRepository) GetByID(ctx context.Context, id int64) (*Note, error) {
+	var n Note
+	var err error
+
+	if r.db.IsSQLite() {
+		err = r.db.QueryRow(ctx,
+			`SELECT id, host, COALESCE(project,''), title, content, COALESCE(tags,''), created_at, updated_at
+			 FROM notes WHERE id=? AND del_yn='N'`,
+			id).Scan(&n.ID, &n.Host, &n.Project, &n.Title, &n.Content, &n.Tags, &n.CreatedAt, &n.UpdatedAt)
+	} else {
+		err = r.db.QueryRow(ctx,
+			`SELECT id, host, COALESCE(project,''), title, content, COALESCE(tags,''), created_at, updated_at
+			 FROM notes WHERE id=$1 AND del_yn='N'`,
+			id).Scan(&n.ID, &n.Host, &n.Project, &n.Title, &n.Content, &n.Tags, &n.CreatedAt, &n.UpdatedAt)
+	}
+
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("note id=%d not found", id)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get note by id: %w", err)
+	}
+	return &n, nil
+}
+
 // SoftDeleteByID marks a note as deleted by its ID.
 func (r *NoteRepository) SoftDeleteByID(ctx context.Context, id int64) error {
 	var err error

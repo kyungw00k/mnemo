@@ -82,6 +82,11 @@ func (s *NoteService) List(ctx context.Context, host, project string, limit int)
 	return s.repo.ListByProject(ctx, host, project, limit)
 }
 
+// GetByID retrieves a single note by its ID.
+func (s *NoteService) GetByID(ctx context.Context, id int64) (*repository.Note, error) {
+	return s.repo.GetByID(ctx, id)
+}
+
 // DeleteByID soft-deletes a note by its ID.
 func (s *NoteService) DeleteByID(ctx context.Context, id int64) error {
 	return s.repo.SoftDeleteByID(ctx, id)
