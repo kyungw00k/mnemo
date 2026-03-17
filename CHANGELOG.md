@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.1](https://github.com/kyungw00k/mnemo/compare/v0.4.0...v0.4.1) (2026-03-17)
+
+
+### Bug Fixes
+
+* **ci:** trigger Docker build on release published event ([3e0d0b8](https://github.com/kyungw00k/mnemo/commit/3e0d0b80b892871574c305806e494f5c8b102e64))
+
 ## [0.4.0](https://github.com/kyungw00k/mnemo/compare/v0.3.0...v0.4.0) (2026-03-17)
 
 
