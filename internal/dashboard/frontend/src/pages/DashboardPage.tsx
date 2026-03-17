@@ -4,6 +4,7 @@ import type { StatsData, MemoryItem, NoteItem } from '../types';
 import { StatsCard } from '../components/StatsCard';
 import { MemoryTable } from '../components/MemoryTable';
 import { NoteList } from '../components/NoteList';
+import { NoteDetail } from '../components/NoteDetail';
 import { SearchBar } from '../components/SearchBar';
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -41,6 +42,8 @@ export function DashboardPage() {
   const [notes, setNotes] = useState<NoteItem[]>([]);
   const [notesLoading, setNotesLoading] = useState(true);
   const [notesError, setNotesError] = useState<string | null>(null);
+
+  const [selectedNoteId, setSelectedNoteId] = useState<number | null>(null);
 
   // Fetch stats once
   useEffect(() => {
@@ -82,6 +85,7 @@ export function DashboardPage() {
   }, [selectedHost, loadMemories, loadNotes]);
 
   return (
+    <>
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24, padding: 24 }}>
       {/* Stats row */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
@@ -143,8 +147,20 @@ export function DashboardPage() {
 
       {/* Recent notes */}
       <Section title="Recent Notes">
-        <NoteList items={notes} loading={notesLoading} error={notesError} />
+        <NoteList
+          items={notes}
+          loading={notesLoading}
+          error={notesError}
+          onNoteClick={setSelectedNoteId}
+        />
       </Section>
     </div>
+
+    {/* Note detail modal */}
+    <NoteDetail
+      noteId={selectedNoteId}
+      onClose={() => setSelectedNoteId(null)}
+    />
+    </>
   );
 }

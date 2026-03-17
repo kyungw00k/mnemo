@@ -4,6 +4,7 @@ import type {
   NotesResponse,
   SearchResponse,
   GraphData,
+  NoteItem,
 } from '../types';
 
 async function apiFetch<T>(path: string): Promise<T> {
@@ -64,4 +65,8 @@ export function fetchGraph(params: { host?: string }): Promise<GraphData> {
   const q = new URLSearchParams();
   if (params.host) q.set('host', params.host);
   return apiFetch<GraphData>(`/api/graph?${q}`);
+}
+
+export function fetchNoteDetail(id: number): Promise<NoteItem> {
+  return apiFetch<NoteItem>(`/api/notes/${id}`);
 }

@@ -4,6 +4,7 @@ interface NoteListProps {
   items: NoteItem[];
   loading: boolean;
   error: string | null;
+  onNoteClick?: (id: number) => void;
 }
 
 function formatDate(iso: string): string {
@@ -21,7 +22,7 @@ function truncate(s: string, n: number): string {
   return s.length > n ? s.slice(0, n) + '…' : s;
 }
 
-export function NoteList({ items, loading, error }: NoteListProps) {
+export function NoteList({ items, loading, error, onNoteClick }: NoteListProps) {
   if (loading) {
     return (
       <div style={{ padding: 24, color: 'var(--text-muted)', textAlign: 'center' }}>
@@ -47,12 +48,15 @@ export function NoteList({ items, loading, error }: NoteListProps) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
       {items.map(note => (
-        <div key={note.id} style={{
-          padding: '14px 16px',
-          borderBottom: '1px solid var(--border)',
-          cursor: 'default',
-          transition: 'background 0.1s',
-        }}
+        <div
+          key={note.id}
+          style={{
+            padding: '14px 16px',
+            borderBottom: '1px solid var(--border)',
+            cursor: onNoteClick ? 'pointer' : 'default',
+            transition: 'background 0.1s',
+          }}
+          onClick={() => onNoteClick?.(note.id)}
           onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
           onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
         >
