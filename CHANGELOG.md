@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.4.0](https://github.com/kyungw00k/mnemo/compare/v0.3.0...v0.4.0) (2026-03-17)
+
+
+### Features
+
+* **hook:** add install subcommand to register Claude Code hooks ([87c2e24](https://github.com/kyungw00k/mnemo/commit/87c2e24ecbb264dc18b8cf168de3dd6d4b151232))
+* **hook:** improve memory quality and add pre-compact context preservation ([8482175](https://github.com/kyungw00k/mnemo/commit/8482175b8b5b3fb3f96f0474eb4dd3a79c93ae20))
+* **mcp:** auto-install Claude Code hooks on MCP server startup ([6333cb7](https://github.com/kyungw00k/mnemo/commit/6333cb7e0dc36b83a4ba1375eca0e164a0a01e99))
+
+
+### Bug Fixes
+
+* **ci:** merge Docker workflow into CI and fix Go version mismatch ([c5e6702](https://github.com/kyungw00k/mnemo/commit/c5e6702c046ff38127f6eba798000f0238a53727))
+
 ## [0.3.0](https://github.com/kyungw00k/mnemo/compare/v0.2.0...v0.3.0) (2026-03-17)
 
 
