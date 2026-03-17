@@ -39,6 +39,8 @@ func RunHook(args []string) {
 		runObserve()
 	case "pre-compact":
 		runPreCompact()
+	case "install":
+		RunInstall(args[1:])
 	default:
 		writeJSON(map[string]any{"continue": true})
 	}
