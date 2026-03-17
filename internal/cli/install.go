@@ -116,6 +116,73 @@ func claudeSettingsPath() string {
 	return filepath.Join(home, ".claude", "settings.json")
 }
 
+// MaybeAutoInstallHooks installs mnemo hooks into ~/.claude/settings.json when:
+//   - AUTO_INSTALL_HOOKS env var is not "false"
+//   - ~/.claude/ directory exists (Claude Code is present)
+//   - hooks are not already installed
+//
+// All output goes to stderr. Errors are logged but do not abort startup.
+func MaybeAutoInstallHooks() {
+	if os.Getenv("AUTO_INSTALL_HOOKS") == "false" {
+		return
+	}
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return
+	}
+	claudeDir := filepath.Join(home, ".claude")
+	if _, err := os.Stat(claudeDir); os.IsNotExist(err) {
+		return // Claude Code not detected
+	}
+
+	path := claudeSettingsPath()
+
+	sf := settingsFile{}
+	if data, err := os.ReadFile(path); err == nil {
+		if jsonErr := json.Unmarshal(data, &sf); jsonErr != nil {
+			fmt.Fprintf(os.Stderr, "mnemo: auto-install hooks: parse %s: %v\n", path, jsonErr)
+			return
+		}
+	}
+
+	hs := hooksSection{}
+	if raw, ok := sf["hooks"]; ok {
+		if jsonErr := json.Unmarshal(raw, &hs); jsonErr != nil {
+			fmt.Fprintf(os.Stderr, "mnemo: auto-install hooks: parse hooks: %v\n", jsonErr)
+			return
+		}
+	}
+
+	if !installAllMnemoHooks(hs) {
+		return // already installed
+	}
+
+	if len(hs) == 0 {
+		delete(sf, "hooks")
+	} else {
+		raw, _ := json.Marshal(hs)
+		sf["hooks"] = raw
+	}
+
+	out, err := json.MarshalIndent(sf, "", "  ")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "mnemo: auto-install hooks: marshal: %v\n", err)
+		return
+	}
+	out = append(out, '\n')
+
+	if mkErr := os.MkdirAll(filepath.Dir(path), 0o755); mkErr != nil {
+		fmt.Fprintf(os.Stderr, "mnemo: auto-install hooks: mkdir: %v\n", mkErr)
+		return
+	}
+	if writeErr := os.WriteFile(path, out, 0o644); writeErr != nil {
+		fmt.Fprintf(os.Stderr, "mnemo: auto-install hooks: write: %v\n", writeErr)
+		return
+	}
+	fmt.Fprintln(os.Stderr, "mnemo: auto-installed Claude Code hooks (restart Claude to activate)")
+}
+
 func printHookActions(verb string) {
 	for _, def := range mnemoHookDefs {
 		if def.matcher != "" {
