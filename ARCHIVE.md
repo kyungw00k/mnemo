@@ -37,3 +37,14 @@
 
 - `.github/workflows/docker.yml` — multi-platform (amd64/arm64), GHCR
 - Tags: `:dev` on main push, `:vX.Y.Z` + `:latest` on release tag
+
+## Phase 14: sqlite-vec (Vector Search in SQLite) ✅
+
+> Replaced FTS5 keyword search with cosine similarity via sqlite-vec.
+
+- Task 35: `modernc.org/sqlite` → `mattn/go-sqlite3` + `sqlite-vec-go-bindings/cgo`
+- Task 36: `internal/migrations/sqlite/004_vec.sql` — `vec_memories`, `vec_notes` vec0 tables
+- Task 37: `sqliteVectorSearch()` in `memory.go` / `note.go`
+- Task 38: Removed `isSQLite` embedding guard — both DBs attempt embedding
+- Task 39: `Makefile` CGO_ENABLED=1, static Linux build, CI gcc install
+- Task 40: README updated with sqlite-vec vector search docs

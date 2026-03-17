@@ -11,6 +11,57 @@ Copy this file to your AI tool's instruction file:
 Edit the sections below to match your project and preferences.
 -->
 
+## Claude Code: Hook Setup (Recommended)
+
+Configure hooks in `~/.claude/settings.json` for automatic memory management.
+No persistent server required — hooks access the DB directly via `mnemo` subcommands.
+
+```json
+{
+  "hooks": {
+    "SessionStart": [
+      { "matcher": "startup|resume",
+        "hooks": [{ "type": "command", "command": "mnemo hook session-start" }] }
+    ],
+    "PostToolUse": [
+      { "matcher": "Edit|Write|Bash",
+        "hooks": [{ "type": "command", "command": "mnemo hook observe" }] }
+    ],
+    "Stop": [
+      { "hooks": [{ "type": "command", "command": "mnemo hook session-end" }] }
+    ]
+  }
+}
+```
+
+**MCP (optional, for interactive queries during conversation):**
+
+```json
+{
+  "mcpServers": {
+    "mnemo": {
+      "command": "mnemo",
+      "env": { "TRANSPORT": "stdio" }
+    }
+  }
+}
+```
+
+**Dashboard (on-demand):**
+
+```bash
+mnemo dashboard          # opens http://localhost:8765
+mnemo dashboard --port 9000
+```
+
+**Interactive CLI:**
+
+```bash
+mnemo search "authentication strategy"
+mnemo search "database" --category decision --limit 5
+mnemo save decision auth_strategy "JWT with refresh tokens"
+```
+
 ## Memory: Session Start
 
 At the start of EVERY new session, before doing anything else:
